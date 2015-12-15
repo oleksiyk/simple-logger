@@ -1,0 +1,29 @@
+{
+    "name": "simple-logger",
+    "description": "Nice simple logger for Node",
+    "homepage": "http://github.com/oleksiyk/simple-logger",
+    "author": {
+        "name": "Oleksiy Krivoshey",
+        "email": "oleksiyk@gmail.com"
+    },
+    "version": "0.0.1",
+    "main": "./index.js",
+    "keywords": ["logger", "log"],
+    "dependencies": {
+        "lodash": "~=3.10.1",
+        "express": "~=3.10.5"
+    },
+    "devDependencies": {
+    },
+    "bugs": {
+        "url": "https://github.com/oleksiyk/simple-logger/issues"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git://github.com/oleksiyk/simple-logger.git"
+    },
+    "readme": "Nice simple logger for Node",
+    "readmeFilename": "README.md",
+    "license": "MIT"
+}
+
