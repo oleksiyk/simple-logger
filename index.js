@@ -55,7 +55,13 @@ module.exports = function(options) {
 
     var udp, hostname = require('os').hostname(), logstashInd = 0;
 
-    options = options || {};
+    options = _.defaults(options || {}, {
+        logLevel: 255,
+        logstash: false,
+        ttyColors: true
+    });
+
+    options.logLevel = process.env.NSL_LEVEL ? parseInt(process.env.NSL_LEVEL) : options.logLevel;
 
     if(options.logstash){
         options.logstash.port = options.logstash.port || 9999;
@@ -87,7 +93,7 @@ module.exports = function(options) {
             }
         }
 
-        if(isatty){
+        if(isatty && options.ttyColors){
             level = colored(level, levels[level]);
             ts = colored(ts, 'grey');
         }
@@ -107,17 +113,27 @@ module.exports = function(options) {
 
     return {
 
+        /* jshint bitwise: false */
+
         log: function() {
+            if(!(options.logLevel & 4)){
+                return;
+            }
             log.apply(null, ['INFO'].concat(Array.prototype.slice.call(arguments)));
         },
 
         debug: function() {
-            if(options.debug){
-                log.apply(null, ['DEBUG'].concat(Array.prototype.slice.call(arguments)));
+            if(!(options.logLevel & 16)){
+                return;
             }
+            log.apply(null, ['DEBUG'].concat(Array.prototype.slice.call(arguments)));
         },
 
         error: function error () {
+            if(!(options.logLevel & 1)){
+                return;
+            }
+
             // capture error() call location
             var stackErr = new Error();
             Error.captureStackTrace(stackErr, error);
@@ -141,14 +157,24 @@ module.exports = function(options) {
         },
 
         warn: function() {
+            if(!(options.logLevel & 2)){
+                return;
+            }
             log.apply(null, ['WARN'].concat(Array.prototype.slice.call(arguments)));
         },
 
         warning: function() {
+            if(!(options.logLevel & 2)){
+                return;
+            }
             log.apply(null, ['WARN'].concat(Array.prototype.slice.call(arguments)));
         },
 
         expressLogger: function (options) {
+            if(!(options.logLevel & 8)){
+                return;
+            }
+
             if ('object' == typeof options) {
                 options = options || {};
             } else if (options) {
