@@ -19,7 +19,8 @@ var colors = {
     'strikethrough': ['\x1B[9m', '\x1B[29m'],
     // text colors
     'white'        : ['\x1B[37m', '\x1B[39m'],
-    'grey'         : ['\x1B[90m', '\x1B[39m'],
+    // 'grey'         : ['\x1B[90m', '\x1B[39m'],
+    'grey'         : ['\x1B[38;5;240m', '\x1B[39m'],
     'black'        : ['\x1B[30m', '\x1B[39m'],
     'blue'         : ['\x1B[34m', '\x1B[39m'],
     'cyan'         : ['\x1B[36m', '\x1B[39m'],
