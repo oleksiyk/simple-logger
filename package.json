@@ -10,10 +10,11 @@
     "main": "./index.js",
     "keywords": ["logger", "log"],
     "dependencies": {
-        "lodash": "~=3.10.1",
-        "express": "~=3.10.5"
+        "lodash": "^4.3.0"
     },
     "devDependencies": {
+        "eslint": "^1.10.3",
+        "eslint-config-airbnb": "^5.0.0"
     },
     "bugs": {
         "url": "https://github.com/oleksiyk/simple-logger/issues"

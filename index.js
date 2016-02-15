@@ -1,9 +1,8 @@
-"use strict";
+'use strict';
 
 var util    = require('util');
 var tty     = require('tty');
 var _       = require('lodash');
-var express = require('express');
 var dgram   = require('dgram');
 
 // is it a tty or file?
@@ -12,188 +11,195 @@ var stdout = process.stdout, stderr = process.stderr;
 
 var colors = {
     // text style
-    'bold'         : ['\x1B[1m', '\x1B[22m'],
-    'italic'       : ['\x1B[3m', '\x1B[23m'],
-    'underline'    : ['\x1B[4m', '\x1B[24m'],
-    'inverse'      : ['\x1B[7m', '\x1B[27m'],
-    'strikethrough': ['\x1B[9m', '\x1B[29m'],
+    bold          : '\x1B[1m',
+    italic        : '\x1B[3m',
+    underline     : '\x1B[4m',
+    inverse       : '\x1B[7m',
+    strikethrough : '\x1B[9m',
     // text colors
-    'white'        : ['\x1B[37m', '\x1B[39m'],
-    // 'grey'         : ['\x1B[90m', '\x1B[39m'],
-    'grey'         : ['\x1B[38;5;240m', '\x1B[39m'],
-    'black'        : ['\x1B[30m', '\x1B[39m'],
-    'blue'         : ['\x1B[34m', '\x1B[39m'],
-    'cyan'         : ['\x1B[36m', '\x1B[39m'],
-    'green'        : ['\x1B[32m', '\x1B[39m'],
-    'magenta'      : ['\x1B[35m', '\x1B[39m'],
-    'red'          : ['\x1B[31m', '\x1B[39m'],
-    'yellow'       : ['\x1B[33m', '\x1B[39m'],
+    default       : '\x1B[39m',
+    black         : '\x1B[30m',
+    blue          : '\x1B[34m',
+    cyan          : '\x1B[36m',
+    green         : '\x1B[32m',
+    magenta       : '\x1B[35m',
+    red           : '\x1B[31m',
+    yellow        : '\x1B[33m',
+    lgrey         : '\x1B[37m',
+    dgrey         : '\x1B[90m',
+    lred          : '\x1B[91m',
+    lgreen        : '\x1B[92m',
+    lyellow       : '\x1B[93m',
+    lblue         : '\x1B[94m',
+    lmagenta      : '\x1B[95m',
+    lcyan         : '\x1B[96m',
+    white         : '\x1B[97m',
     // background colors
-    'whiteBG'      : ['\x1B[47m', '\x1B[49m'],
-    'greyBG'       : ['\x1B[49;5;8m', '\x1B[49m'],
-    'blackBG'      : ['\x1B[40m', '\x1B[49m'],
-    'blueBG'       : ['\x1B[44m', '\x1B[49m'],
-    'cyanBG'       : ['\x1B[46m', '\x1B[49m'],
-    'greenBG'      : ['\x1B[42m', '\x1B[49m'],
-    'magentaBG'    : ['\x1B[45m', '\x1B[49m'],
-    'redBG'        : ['\x1B[41m', '\x1B[49m'],
-    'yellowBG'     : ['\x1B[43m', '\x1B[49m']
-};
-
-var levels = {
-    'DEBUG': 'blue',
-    'INFO': 'green',
-    'WARN': 'yellow',
-    'ERROR': 'red',
-    'HTTP': 'cyan'
+    whiteBG       : '\x1B[47m',
+    blackBG       : '\x1B[40m',
+    blueBG        : '\x1B[44m',
+    cyanBG        : '\x1B[46m',
+    greenBG       : '\x1B[42m',
+    magentaBG     : '\x1B[45m',
+    redBG         : '\x1B[41m',
+    yellowBG      : '\x1B[43m'
 };
 
 function colored(str, color) {
-    return colors[color][0] + str + colors[color][1];
+    // http://misc.flogisoft.com/bash/tip_colors_and_formatting
+    var _color = (typeof color === 'string') ? colors[color] || colors.white : ('\x1B[38;5;' + color + 'm'); // 16 or 256 color scheme
+    return _color + str + '\x1B[0m';
 }
 
-module.exports = function(options) {
+function Logger(options) {
+    var self = this;
 
-    var udp, hostname = require('os').hostname(), logstashInd = 0;
+    self.hostname = require('os').hostname();
+    self.logstashHosts = [];
 
-    options = _.defaults(options || {}, {
-        logLevel: 255,
-        logstash: false,
-        ttyColors: true
+    self.levels = {
+        DEBUG : 24,
+        TRACE : 172,
+        INFO  : 70,
+        WARN  : 'yellow',
+        ERROR : 'red'
+    };
+
+    self.options = _.defaultsDeep(options || {}, {
+        logLevel: 5,
+        logstash: {
+            enabled: false,
+            connectionString: '127.0.0.1:9999',
+            app: '-'
+        },
+        ttyColors: isatty && true
     });
 
     options.logLevel = process.env.NSL_LEVEL ? parseInt(process.env.NSL_LEVEL) : options.logLevel;
 
-    if(options.logstash){
-        options.logstash.port = options.logstash.port || 9999;
-        options.logstash.hosts = options.logstash.hosts || ['127.0.0.1'];
-        udp = dgram.createSocket('udp4');
+    if (options.logstash.enabled) {
+        self.logstashHosts = options.logstash.connectionString.split(',').map(function (hostStr) {
+            var h = hostStr.trim().split(':');
+
+            if (h.length < 2) {
+                return undefined;
+            }
+
+            return {
+                host: h[0],
+                port: parseInt(h[1])
+            };
+        });
+
+        self.logstashHosts = _.compact(self.logstashHosts);
+
+        if (self.logstashHosts.length === 0) {
+            throw new Error('No Logstash hosts defined');
+        }
+
+        self.udp = dgram.createSocket('udp4');
+        self.udp.unref();
+
+        self.udp.on('error', function (err) {
+            self.options.logstash.enabled = false;
+            self.error('Logger failed to send message to Logstash:', err);
+            self.options.logstash.enabled = true;
+        });
+    }
+}
+
+module.exports = Logger;
+
+Logger.prototype._log = function (level) {
+    var ts = new Date().toISOString(), args = Array.prototype.slice.call(arguments, 1),
+        data, packet, server;
+
+    level = level || 'INFO';
+
+    if (this.options.logstash.enabled) {
+        data = {
+            '@timestamp': ts,
+            level: level,
+            app: this.options.logstash.app,
+            host: this.hostname,
+            message: util.format.apply(null, args)
+        };
+
+        packet = new Buffer(JSON.stringify(data));
+        server = this.logstashHosts[packet.length % this.logstashHosts.length];
+        this.udp.send(packet, 0, packet.length, server.port, server.host);
     }
 
-    var log = function(level) {
+    if (this.options.ttyColors) {
+        level = colored(level, this.levels[level]);
+        ts = colored(ts, 'dgrey');
+    }
 
-        level = level || 'INFO';
+    args = [ts, level].concat(args);
 
-        var ts = new Date().toISOString();
-        var args = Array.prototype.slice.call(arguments, 1);
+    if (level === 'ERROR') {
+        stderr.write(util.format.apply(null, args) + '\n');
+    } else {
+        stdout.write(util.format.apply(null, args) + '\n');
+    }
+};
 
-        if(options.logstash){
-            var data = {
-                '@timestamp': ts,
-                level: level,
-                module: options.module || '-',
-                host: hostname,
-                message: util.format.apply(null, args)
-            };
+Logger.prototype.log = function () {
+    if (this.options.logLevel > 2) {
+        this._log.apply(this, ['INFO'].concat(Array.prototype.slice.call(arguments)));
+    }
+};
 
-            var packet = JSON.stringify(data);
-            packet = new Buffer(packet);
-            udp.send(packet, 0, packet.length, options.logstash.port, options.logstash.hosts[logstashInd]);
-            if(++logstashInd >= options.logstash.hosts.length){
-                logstashInd = 0;
-            }
-        }
+Logger.prototype.debug = function () {
+    if (this.options.logLevel > 3) {
+        this._log.apply(this, ['DEBUG'].concat(Array.prototype.slice.call(arguments)));
+    }
+};
 
-        if(isatty && options.ttyColors){
-            level = colored(level, levels[level]);
-            ts = colored(ts, 'grey');
-        }
+Logger.prototype.trace = function () {
+    if (this.options.logLevel > 4) {
+        this._log.apply(this, ['TRACE'].concat(Array.prototype.slice.call(arguments)));
+    }
+};
 
-        if(_.isString(args[0])){
-            args[0] = ts + ' ' + level + ' ' + args[0];
-        } else {
-            args = [ts, level].concat(args);
-        }
+Logger.prototype.error = function error() {
+    var loggedAt, stackErr, args, err, i;
+    if (this.options.logLevel > 0) {
+        // capture error() call location
+        stackErr = new Error();
+        Error.captureStackTrace(stackErr, error);
+        loggedAt = '[' + stackErr.stack.split('\n')[1].trim() + ']';
 
-        if(level === 'ERROR'){
-            stderr.write(util.format.apply(null, args) + '\n');
-        } else {
-            stdout.write(util.format.apply(null, args) + '\n');
-        }
-    };
+        args = Array.prototype.slice.call(arguments);
 
-    return {
-
-        /* jshint bitwise: false */
-
-        log: function() {
-            if(!(options.logLevel & 4)){
-                return;
-            }
-            log.apply(null, ['INFO'].concat(Array.prototype.slice.call(arguments)));
-        },
-
-        debug: function() {
-            if(!(options.logLevel & 16)){
-                return;
-            }
-            log.apply(null, ['DEBUG'].concat(Array.prototype.slice.call(arguments)));
-        },
-
-        error: function error () {
-            if(!(options.logLevel & 1)){
-                return;
-            }
-
-            // capture error() call location
-            var stackErr = new Error();
-            Error.captureStackTrace(stackErr, error);
-            var loggedAt = '[' + stackErr.stack.split('\n')[1].trim() + ']';
-
-            var args = Array.prototype.slice.call(arguments);
-
-            for(var i = 0; i < args.length; i++){
-                if (args[i] instanceof Error) {
-                    var err = args[i];
-                    args[i] = err.toString() + '\n' + util.inspect(err, false, 10, isatty);
-                    if (err.stack) {
-                        args[i] += '\n' + err.stack.split('\n').splice(1).join('\n');
-                    }
+        for (i = 0; i < args.length; i++) {
+            if (args[i] instanceof Error) {
+                err = args[i];
+                args[i] = err.toString() + '\n' + util.inspect(err, false, 10, this.options.ttyColors);
+                if (err.stack) {
+                    args[i] += '\n' + err.stack.split('\n').splice(1).join('\n');
                 }
             }
-
-            args.push('\n' + loggedAt);
-
-            log.apply(null, ['ERROR'].concat(args));
-        },
-
-        warn: function() {
-            if(!(options.logLevel & 2)){
-                return;
-            }
-            log.apply(null, ['WARN'].concat(Array.prototype.slice.call(arguments)));
-        },
-
-        warning: function() {
-            if(!(options.logLevel & 2)){
-                return;
-            }
-            log.apply(null, ['WARN'].concat(Array.prototype.slice.call(arguments)));
-        },
-
-        expressLogger: function (options) {
-            if(!(options.logLevel & 8)){
-                return;
-            }
-
-            if ('object' == typeof options) {
-                options = options || {};
-            } else if (options) {
-                options = {
-                    format: options
-                };
-            } else {
-                options = {};
-            }
-
-            options.stream = {
-                write: function (str) {
-                    log.apply(null, ['HTTP', str.trim()] );
-                }
-            };
-
-            return express.logger(options);
         }
 
-    };
+        args.push('\n' + loggedAt);
+
+        this._log.apply(this, ['ERROR'].concat(args));
+    }
+};
+
+Logger.prototype.warn = function () {
+    if (this.options.logLevel > 1) {
+        this._log.apply(this, ['WARN'].concat(Array.prototype.slice.call(arguments)));
+    }
+};
+
+Logger.prototype.mixin = function (dest, prefix) {
+    var self = this;
+
+    prefix = prefix || '';
+
+    ['log', 'warn', 'debug', 'trace', 'error'].forEach(function (m) {
+        dest[prefix + m] = self[m].bind(self);
+    });
 };
