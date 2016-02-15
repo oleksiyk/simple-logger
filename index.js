@@ -72,7 +72,8 @@ function Logger(options) {
             connectionString: '127.0.0.1:9999',
             app: '-'
         },
-        ttyColors: isatty && true
+        ttyColors: isatty && true,
+        logFunction: null
     });
 
     options.logLevel = process.env.NSL_LEVEL ? parseInt(process.env.NSL_LEVEL) : options.logLevel;
@@ -128,6 +129,10 @@ Logger.prototype._log = function (level) {
         packet = new Buffer(JSON.stringify(data));
         server = this.logstashHosts[packet.length % this.logstashHosts.length];
         this.udp.send(packet, 0, packet.length, server.port, server.host);
+    }
+
+    if (typeof this.options.logFunction === 'function') {
+        return this.options.logFunction.apply(null, arguments);
     }
 
     if (this.options.ttyColors) {
